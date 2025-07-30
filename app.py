@@ -65,7 +65,25 @@ def enrich_dataframe(df):
         df["Channel"] =df["Ad"].apply(lambda x: extract_taxonomy_value(x, "CH"))
 
     df = df.iloc[:-1]
+    df = extract_creative_name(df)
     return df
+
+def extract_creative_name(df):
+    def parse_creative(creative):
+        try:
+            # Only process strings that match the expected pattern
+            match = re.search(r"Summer25-(.*?)-DE", creative)
+            if match:
+                cleaned = match.group(1).replace("-", " ").strip()
+                return cleaned
+            else:
+                return None
+        except:
+            return None
+    
+    df["Creative Name"] = df["Creative"].apply(parse_creative)
+    return df
+
 
 def get_column_summary(df):
     summary = {}
