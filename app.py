@@ -413,18 +413,51 @@ with tab3:
             if isinstance(creative_info, pd.DataFrame) and not creative_info.empty:
                 st.markdown("#### 🎨 Creative Summary")
                 creative_info["Image"] = creative_info.index.map(get_image_path)
-
+                creative_info = creative_info.rename(columns={
+                    "Impressions_sum": "Impressions",
+                    "Clicks_sum": "Clicks",
+                    "Click Rate_mean": "Click Rate",
+                    "Size_<lambda>": "Size",
+                    "Market_first": "Market",
+                    "Language_first": "Language",
+                    "Channel_first": "Channel",
+                    "Objective_first": "Objective",
+                    "Project_first": "Project",
+                    "Site (CM360)_<lambda>": "Sites",
+                    "Date_min": "Start Date",
+                    "Date_max": "End Date"
+                })
                 for idx, row in creative_info.iterrows():
                     col1, col2 = st.columns([1, 3])
 
+                    # Show image or fallback
                     if row["Image"]:
                         col1.image(row["Image"], width=150)
                     else:
                         col1.write("❌ No image")
 
-                    col2.markdown("\n".join([
-                        f"**{col}:** {row[col]}" for col in creative_info.columns if col != "Image"
-                    ]))
+                    # Format and display key info
+                    col2.markdown(f"### `{idx}`")
+                    col2.markdown("---")
+                    for col in creative_info.columns:
+                        if col == "Image":
+                            continue
+
+                        val = row[col]
+
+                        # Format float values
+                        if isinstance(val, float):
+                            val = round(val, 2)
+
+                        # Format datetime
+                        elif pd.api.types.is_datetime64_any_dtype(type(val)):
+                            val = val.strftime("%b %d, %Y")
+
+                        # Format lists
+                        elif isinstance(val, list):
+                            val = ", ".join(val)
+
+                        col2.markdown(f"**{col}:** {val}")
 
 
         except Exception as e:
