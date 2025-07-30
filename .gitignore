@@ -1,8 +1,6 @@
 # Ignore all Excel files
 *.xlsx
 
-data/
-
 # Ignore model files
 *.pkl
 *.npz
