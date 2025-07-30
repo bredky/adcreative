@@ -29,10 +29,24 @@ excel_file = st.sidebar.file_uploader("Upload your campaign metrics Excel file",
 image_folder = st.sidebar.text_input("Path to your image folder", value="images/")
 
 import re
+creative_mapping = {
+    "Excite Jazz": "Engagement-Display-Summer25-Excite-Jazz-DE-Grn-300x600-NA",
+    "Excite WBW": "Engagement-Display-Summer25-Excite-WBW-DE-Grn-300x600-NA",
+    "Excite YWW": "Engagement-Display-Summer25-Excite-YWW-DE-Grn-300x600-NA",
+    "Inspire LAD": "Engagement-Display-Summer25-Inspire-LAD-DE-Grn-300x600-NA",
+    "Inspire LADKM": "Engagement-Display-Summer25-Inspire-LADKM-DE-Grn-300x600-NA",
+    "Inspire TLP": "Engagement-Display-Summer25-Inspire-TLP-DE-Grn-300x600-NA",
+    "Restore Beach": "Engagement-Display-Summer25-Restore-Beach-DE-Grn-300x600-NA",
+    "Restore Pizza": "Engagement-Display-Summer25-Restore-Pizza-DE-Grn-300x600-NA",
+    "Restore Shopping": "Engagement-Display-Summer25-Restore-Shopping-DE-Grn-300x600-NA"
+}
 
 def get_image_path(creative_name):
-    image_path = os.path.join("images", f"{creative_name}.jpg")
-    return image_path if os.path.exists(image_path) else None
+    filename = creative_mapping.get(creative_name)
+    if filename:
+        image_path = os.path.join("images", f"{filename}.jpg")
+        return image_path if os.path.exists(image_path) else None
+    return None
 
 def clean_gpt_code(gpt_code):
     # Remove code fences and 'python' artifacts
