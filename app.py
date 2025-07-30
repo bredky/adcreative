@@ -128,7 +128,7 @@ Do not import anything. Only use variables `df` and `pd`.
 Return only code and the chart comment. No explanation.
 Rememeber whenever possible use the creative name column to group creatives, only when the specific creative is mentioned (full name) then use that otherwise stick to the Creative Name column
 ✅ Additionally: if the query involves any Creative(s), return a second variable called `creative_info` that contains a grouped summary of the matching creative(s) from the original dataframe `df`. make sure that it is filtered and is respective to the result only
-make sure to group them respectively, i want impressions, clicks, click rate, size, market, language, channel, objective, project. Do NOT call .set_index("Creative") after a .groupby("Creative") aggregation — it's already the index.
+make sure to group them respectively, i want impressions, clicks, click rate, list of sizes, market, language, channel, objective, project, list of sites, duration start and end (date min and max). However if size was involved Do NOT call .set_index("Creative") after a .groupby("Creative") aggregation — it's already the index.
 Only use .set_index("Creative") if the Creative column was reset or not the index.
 
 
