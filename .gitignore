@@ -1,0 +1,13 @@
+# Ignore all Excel files
+*.xlsx
+
+data/
+
+# Ignore model files
+*.pkl
+*.npz
+
+# Ignore environment and secret files
+.env
+.env.*
+__pycache__/

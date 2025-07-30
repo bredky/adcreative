@@ -1,0 +1,12 @@
+streamlit
+pandas
+numpy
+openai
+scikit-learn
+Pillow
+joblib
+python-dotenv
+lightgbm
+open-clip-torch
+
+
