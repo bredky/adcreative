@@ -105,8 +105,9 @@ def get_column_summary(df):
             summary[col] = unique_vals[:10]  # show top 20 per column
     return summary
 
-def query_chatbot(df, user_prompt):
-    system_prompt = f"""
+def query_chatbot(df, user_prompt, mode = "Creative Focused"):
+    if mode == "Creative Focused":
+        system_prompt = f"""
 You are a helpful data assistant. You are working with a Pandas dataframe called `df` with the following columns:
 {list(df.columns)}
 
@@ -136,7 +137,52 @@ do not reset_index after a groupby, especially when grouping Creative Name or Cr
 
 
 
+
+
     """.strip()
+        
+    if mode == "Campaign Focused":
+        system_prompt = f"""
+You are a helpful data assistant. You are working with a Pandas dataframe called `df` with the following columns:
+{list(df.columns)}
+
+Here are sample values for key columns:
+{get_column_summary(df)}
+
+Your job is to:
+1. Generate **pure Python code** using Pandas to answer the user's question.
+2. Assign the result to a variable called `result`.
+3. On a new line, provide a chart type comment: e.g., `# chart: bar`, `# chart: line`, or `# chart: none`.
+
+Only suggest a chart if the result is a DataFrame or Series (e.g. grouped output, daily trend, comparison).
+If the result is a single number or scalar, return `# chart: none`.
+If your result is a DataFrame with one or more numeric columns and one categorical column, use `.set_index()` to make the categorical column the x-axis (only if helpful for visualization).
+Whenever .agg() is used with multiple aggregation functions (like ['min', 'max']), flatten the resulting multi-level columns using:
+df.columns = ['_'.join(col).strip() if isinstance(col, tuple) else col for col in df.columns]
+ Do NOT call .set_index("Campaign") after a .groupby("Campaign") aggregation — it's already the index.
+Only use .set_index("Campaign") if the Campaign column was reset or not the index.
+If the data contains multiple rows for the same value (e.g. same Campaign, Date, or Creative), use `.groupby()` and aggregate using `.sum()` or `.mean()` before assigning to result.
+
+Do not import anything. Only use variables `df` and `pd`. Return only code and the chart comment. No explanation.
+
+When answering questions involving campaigns, group by the **`Campaign`** column. If a specific campaign name is mentioned, use the exact value in filtering. If a general query is asked, summarize by Campaign.
+
+✅ Additionally: if the query involves any Campaign(s), return a second variable called `campaign_info` that summarizes all matching campaign(s) from the original `df`.
+
+For `campaign_info`, group by `Campaign` and return:
+- `Impressions` (sum)
+- `Clicks` (sum)
+- `Click Rate` (mean)
+- `Creative Count` (;ist of unique Creative Names)
+- `Size` (list of unique values)
+- `Market`, `Language`, `Channel`, `Objective`, `Project` (first non-null value)
+- `Site (CM360)` (list of unique sites)
+- `Date` (min and max)
+
+Use `.agg()` accordingly and flatten multi-level columns using:
+```python
+df.columns = ['_'.join(col).strip() if isinstance(col, tuple) else col for col in df.columns]
+""".strip()
 
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -318,26 +364,44 @@ with tab2:
                 st.markdown(feedback)
 
 
-                # similarity searchcZ
-                st.markdown("###  Top 3 Similar Ads")
-                db = np.load("model_store.npz", allow_pickle=True)["metadata"]
-                db = db.tolist()
+                
+                st.markdown("### 🔍 Top 3 Similar Ads")
 
-                emb_matrix = np.array([entry["embedding"] for entry in db])
-                sim_scores = cosine_similarity([features], emb_matrix)[0]
-                top_idxs = sim_scores.argsort()[::-1][:3]
+                try:
+                    db = np.load("similar_ads_db.npz", allow_pickle=True)["metadata"]
+                    st.write("Loaded DB entries:", len(db))
+                    st.write("Sample entry:", db[0] if db else "None")
 
-                for idx in top_idxs:
-                    entry = db[idx]
-                    col1, col2 = st.columns([1, 3])
-                    if os.path.exists(entry["image_path"]):
-                        col1.image(entry["image_path"], width=150)
-                    col2.markdown(f"""
-                    **{entry['campaign_name']}**  
-                    -  Predicted CTR: `{entry['predicted_ctr']:.4f}`  
-                    - Actual CTR: `{entry['actual_ctr']:.4f}`
-                    """)
-                    st.markdown("---")
+                    db = db.tolist()
+
+                    # Filter out any missing embeddings or paths
+                    db = [entry for entry in db if "embedding" in entry and "image_path" in entry]
+
+                    if not db:
+                        st.warning("No similar ads in the database.")
+                    else:
+                        emb_matrix = np.array([entry["embedding"] for entry in db])
+                        sim_scores = cosine_similarity([features], emb_matrix)[0]
+                        top_idxs = sim_scores.argsort()[::-1][:3]
+
+                        for idx in top_idxs:
+                            entry = db[idx]
+                            col1, col2 = st.columns([1, 3])
+
+                            if os.path.exists(entry["image_path"]):
+                                col1.image(entry["image_path"], width=150)
+                            else:
+                                col1.write("❌ Image not available")
+
+                            col2.markdown(f"""
+                            **{entry['campaign_name']}**  
+                            - Predicted CTR: `{entry.get('predicted_ctr', 'N/A'):.4f}`  
+                            - Actual CTR: `{entry.get('CTR', 'N/A'):.4f}`
+                            """)
+                            st.markdown("---")
+
+                except Exception as e:
+                    st.error(f"Failed to load similar ads: {e}")
 
         except Exception as e:
             st.error(f" Error processing image: {e}")
@@ -364,13 +428,14 @@ with tab3:
         st.info("Please upload a daily delivery file to begin.")
 
     st.subheader(" Ask Questions About Your Daily Data")
+    query_mode = st.radio("Choose analysis mode:", ["Creative Focused", "Campaign Focused"])
     user_question = st.text_input("Ask a question eg- How many clicks did creative Engagement-Display-Summer25-Inspire-TLP-DE-Grn-300x250-NA get on July 24")
 
     if user_question and "raw_campaign_df" in st.session_state:
         df = st.session_state["raw_campaign_df"]
 
         try:
-            gpt_code = query_chatbot(df, user_question)
+            gpt_code = query_chatbot(df, user_question, mode=query_mode)
             clean_code_raw = clean_gpt_code(gpt_code)
             clean_code, chart_type = parse_code_and_chart_type(clean_code_raw)
             st.code(clean_code, language="python")
@@ -385,6 +450,7 @@ with tab3:
                 exec(clean_code, {}, local_vars)
                 result = local_vars.get("result", "No result returned.")
                 creative_info = local_vars.get("creative_info", None)
+                campaign_info = local_vars.get("campaign_info", None)
             except Exception as e:
                 st.error(f" Error running cleaned code:\n{e}")
 
@@ -459,6 +525,68 @@ with tab3:
 
                         col2.markdown(f"**{col}:** {val}")
 
+            if isinstance(campaign_info, pd.DataFrame) and not campaign_info.empty:
+                print("Campaigns in result:", result['Campaign'].unique())
+                print("Campaigns in campaign_info:", campaign_info.index.tolist())
+                st.markdown("####Campaign Summary")
 
+                campaign_info = campaign_info.rename(columns={
+                        "Impressions_sum": "Impressions",
+                        "Clicks_sum": "Clicks",
+                        "Click Rate_mean": "Click Rate",
+                        "Site (CM360)_<lambda>": "Sites",
+                        "Date_min": "Start Date",
+                        "Date_max": "End Date",
+                        "Creative Count_<lambda>": "Creative Count"
+                    })
+                st.write("Rendering campaign_info with rows:", len(campaign_info))
+                for idx, row in campaign_info.iterrows():
+                    st.markdown(f"### `{idx}`")
+                    st.markdown("---")
+                    for col, val in row.items():
+                                if isinstance(val, float):
+                                    val = round(val, 2)
+                                elif pd.api.types.is_datetime64_any_dtype(type(val)):
+                                    val = val.strftime("%b %d, %Y")
+                                elif isinstance(val, list):
+                                    val = ", ".join([str(v) for v in val if v is not None])
+                                elif val is None:
+                                    val = "—"
+                                st.markdown(f"**{col}:** {val}")
+
+
+
+
+# or idx, row in creative_info.iterrows():
+#                     col1, col2 = st.columns([1, 3])
+
+#                     # Show image or fallback
+#                     if row["Image"]:
+#                         col1.image(row["Image"], width=150)
+#                     else:
+#                         col1.write("❌ No image")
+
+#                     # Format and display key info
+#                     col2.markdown(f"### `{idx}`")
+#                     col2.markdown("---")
+#                     for col in creative_info.columns:
+#                         if col == "Image":
+#                             continue
+
+#                         val = row[col]
+
+#                         # Format float values
+#                         if isinstance(val, float):
+#                             val = round(val, 2)
+
+#                         # Format datetime
+#                         elif pd.api.types.is_datetime64_any_dtype(type(val)):
+#                             val = val.strftime("%b %d, %Y")
+
+#                         # Format lists
+#                         elif isinstance(val, list):
+#                             val = ", ".join(val)
+
+#                         col2.markdown(f"**{col}:** {val}")
         except Exception as e:
             st.error(f"Error while running GPT-generated code:\n{e}")
