@@ -80,6 +80,13 @@ def enrich_dataframe(df):
     df = extract_creative_name(df)
     return df
 
+def find_similar_images(query_embedding, metadata, top_k=3):
+    stored_embeddings = np.array([item["embedding"] for item in metadata])
+    similarities = cosine_similarity([query_embedding], stored_embeddings)[0]
+    top_indices = similarities.argsort()[-top_k:][::-1]
+
+    return [metadata[i] for i in top_indices]
+
 def extract_creative_name(df):
     def parse_creative(creative):
         try:
@@ -258,7 +265,8 @@ with tab1:
         if len(X) == 0:
             st.error("No valid images found matching the campaign names.")
         else:
-            model, raw_preds, r2 = train_model(X, y, df)
+            metadata = df.to_dict(orient="records")  # Convert DataFrame to list of dicts
+            model, raw_preds, r2 = train_model(X, y, metadata)
 
             
             preds = np.clip(raw_preds, 0, 1)
@@ -367,41 +375,26 @@ with tab2:
                 
                 st.markdown("### 🔍 Top 3 Similar Ads")
 
-                try:
-                    db = np.load("similar_ads_db.npz", allow_pickle=True)["metadata"]
-                    st.write("Loaded DB entries:", len(db))
-                    st.write("Sample entry:", db[0] if db else "None")
+                query_embedding = extract_clip_features(image_path)
 
-                    db = db.tolist()
+                # Load metadata
+                stored = np.load("model_store.npz", allow_pickle=True)
+                metadata = stored["metadata"].tolist()
 
-                    # Filter out any missing embeddings or paths
-                    db = [entry for entry in db if "embedding" in entry and "image_path" in entry]
+                # Find similar ads
+                top_similars = find_similar_images(query_embedding, metadata, top_k=3)
 
-                    if not db:
-                        st.warning("No similar ads in the database.")
-                    else:
-                        emb_matrix = np.array([entry["embedding"] for entry in db])
-                        sim_scores = cosine_similarity([features], emb_matrix)[0]
-                        top_idxs = sim_scores.argsort()[::-1][:3]
-
-                        for idx in top_idxs:
-                            entry = db[idx]
-                            col1, col2 = st.columns([1, 3])
-
-                            if os.path.exists(entry["image_path"]):
-                                col1.image(entry["image_path"], width=150)
-                            else:
-                                col1.write("❌ Image not available")
-
-                            col2.markdown(f"""
-                            **{entry['campaign_name']}**  
-                            - Predicted CTR: `{entry.get('predicted_ctr', 'N/A'):.4f}`  
-                            - Actual CTR: `{entry.get('CTR', 'N/A'):.4f}`
-                            """)
-                            st.markdown("---")
-
-                except Exception as e:
-                    st.error(f"Failed to load similar ads: {e}")
+                st.subheader("🖼️ Top 3 Similar Ads")
+                for entry in top_similars:
+                    col1, col2 = st.columns([1, 3])
+                    if os.path.exists(entry["image_path"]):
+                        col1.image(Image.open(entry["image_path"]), width=150)
+                    col2.markdown(f"""
+                    - **Campaign:** `{entry['campaign_name']}`
+                    - **Actual CTR:** `{entry.get('CTR', 'N/A'):.4f}`
+                    - **Predicted CTR:** `{entry.get('predicted_ctr', 'N/A'):.4f}`
+                    """)
+                    st.markdown("---")
 
         except Exception as e:
             st.error(f" Error processing image: {e}")
@@ -526,20 +519,18 @@ with tab3:
                         col2.markdown(f"**{col}:** {val}")
 
             if isinstance(campaign_info, pd.DataFrame) and not campaign_info.empty:
-                print("Campaigns in result:", result['Campaign'].unique())
-                print("Campaigns in campaign_info:", campaign_info.index.tolist())
                 st.markdown("####Campaign Summary")
 
                 campaign_info = campaign_info.rename(columns={
-                        "Impressions_sum": "Impressions",
-                        "Clicks_sum": "Clicks",
-                        "Click Rate_mean": "Click Rate",
-                        "Site (CM360)_<lambda>": "Sites",
-                        "Date_min": "Start Date",
-                        "Date_max": "End Date",
-                        "Creative Count_<lambda>": "Creative Count"
-                    })
-                st.write("Rendering campaign_info with rows:", len(campaign_info))
+                "Impressions_sum": "Impressions",
+                "Clicks_sum": "Clicks",
+                "Click Rate_mean": "Click Rate",
+                "Site (CM360)_<lambda>": "Sites",
+                "Date_min": "Start Date",
+                "Date_max": "End Date",
+                "Creative Name_<lambda>": "Creative Names",
+                "Size_<lambda>": "Ad Sizes"
+            })
                 for idx, row in campaign_info.iterrows():
                     st.markdown(f"### `{idx}`")
                     st.markdown("---")
