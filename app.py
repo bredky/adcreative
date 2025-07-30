@@ -42,11 +42,9 @@ creative_mapping = {
 }
 
 def get_image_path(creative_name):
-    filename = creative_mapping.get(creative_name)
-    if filename:
-        image_path = os.path.join("images", f"{filename}.jpg")
-        return image_path if os.path.exists(image_path) else None
-    return None
+    filename = creative_mapping.get(creative_name, creative_name)
+    image_path = os.path.join("images", f"{filename}.jpg")
+    return image_path if os.path.exists(image_path) else None
 
 def clean_gpt_code(gpt_code):
     # Remove code fences and 'python' artifacts
@@ -128,8 +126,12 @@ Do not import anything. Only use variables `df` and `pd`.
 Return only code and the chart comment. No explanation.
 Rememeber whenever possible use the creative name column to group creatives, only when the specific creative is mentioned (full name) then use that otherwise stick to the Creative Name column
 ✅ Additionally: if the query involves any Creative(s), return a second variable called `creative_info` that contains a grouped summary of the matching creative(s) from the original dataframe `df`. make sure that it is filtered and is respective to the result only
-make sure to group them respectively, i want impressions, clicks, click rate, list of sizes, market, language, channel, objective, project, list of sites, duration start and end (date min and max). However if size was involved Do NOT call .set_index("Creative") after a .groupby("Creative") aggregation — it's already the index.
+make sure to group them respectively, i want impressions, clicks, click rate, list of sizes, market, language, channel, objective, project, list of sites, duration start and end (date min and max?). However if size is the involed respectivelly, do not use this strcutre, use it specific to the code. 
+Whenever .agg() is used with multiple aggregation functions (like ['min', 'max']), flatten the resulting multi-level columns using:
+df.columns = ['_'.join(col).strip() if isinstance(col, tuple) else col for col in df.columns]
+ Do NOT call .set_index("Creative") after a .groupby("Creative") aggregation — it's already the index.
 Only use .set_index("Creative") if the Creative column was reset or not the index.
+do not reset_index after a groupby, especially when grouping Creative Name or Creative
 
 
 
