@@ -92,8 +92,8 @@ def find_similar_images(query_embedding, metadata, top_k=3):
 def extract_creative_name(df):
     def parse_creative(creative):
         try:
-            # Only process strings that match the expected pattern
-            match = re.search(r"Summer25-(.*?)-DE", creative)
+            # Match "Summer25", "Summer25P1"-"Summer25P5", "Summer25InMarket", "Summer25CTVP1"-"Summer25CTVP5"
+            match = re.search(r"(?:Summer25(?:InMarket|CTV)?(?:P[1-5])?)-(.*?)-DE", creative)
             if match:
                 cleaned = match.group(1).replace("-", " ").strip()
                 return cleaned
@@ -133,6 +133,7 @@ If the result is a single number or scalar, return `# chart: none`.
 If your result is a DataFrame with one or more numeric columns and one categorical column, use .set_index() to make the categorical column the x-axis. You dont have to do this when not needed, only do this if you think its needed to make more sense
 If the data contains multiple rows for the same value (e.g. same Creative, Campaign, or Date), use .groupby() and aggregate (e.g. .sum() or .mean()) before assigning to result. Do not return raw repeated rows unless specifically requested.”
 Do not import anything. Only use variables `df` and `pd`.
+If any groupby operations are used, and the resulting DataFrame has a MultiIndex, always call .reset_index() before using or visualizing the result. This helps avoid errors when rendering charts or accessing columns.
 Return only code and the chart comment. No explanation.
 Rememeber whenever possible use the creative name column to group creatives, only when the specific creative is mentioned (full name) then use that otherwise stick to the Creative Name column
 Additionally: if the query involves any Creative(s), return a second variable called `creative_info` that contains a grouped summary of the matching creative(s) from the original dataframe `df`. make sure that it is filtered and is respective to the result only
@@ -142,10 +143,10 @@ df.columns = ['_'.join(col).strip() if isinstance(col, tuple) else col for col i
  Do NOT call .set_index("Creative") after a .groupby("Creative") aggregation — it's already the index.
 Only use .set_index("Creative") if the Creative column was reset or not the index.
 do not reset_index after a groupby, especially when grouping Creative Name or Creative
+When generating aggregation code using .agg() on a DataFrame, do not use 'first' as a string unless it's inside a .groupby(). Otherwise, it will raise an error because DataFrame.first() expects a time-based offset.
+If there's no .groupby(), and you want the first non-null value, use a lambda like:
 
-
-
-
+'Market': lambda x: x.iloc[0]
 
 
     """.strip()
@@ -171,7 +172,7 @@ df.columns = ['_'.join(col).strip() if isinstance(col, tuple) else col for col i
  Do NOT call .set_index("Campaign") after a .groupby("Campaign") aggregation — it's already the index.
 Only use .set_index("Campaign") if the Campaign column was reset or not the index.
 If the data contains multiple rows for the same value (e.g. same Campaign, Date, or Creative), use `.groupby()` and aggregate using `.sum()` or `.mean()` before assigning to result.
-
+If any groupby operations are used, and the resulting DataFrame has a MultiIndex, always call .reset_index() before using or visualizing the result. This helps avoid errors when rendering charts or accessing columns.
 Do not import anything. Only use variables `df` and `pd`. Return only code and the chart comment. No explanation.
 
 When answering questions involving campaigns, group by the **`Campaign`** column. If a specific campaign name is mentioned, use the exact value in filtering. If a general query is asked, summarize by Campaign.
@@ -186,11 +187,17 @@ For `campaign_info`, group by `Campaign` and return:
 - `Size` (list of unique values)
 - `Market`, `Language`, `Channel`, `Objective`, `Project` (first non-null value)
 - `Site (CM360)` (list of unique sites)
+
+
 - `Date` (min and max)
 
 Use `.agg()` accordingly and flatten multi-level columns using:
 ```python
 df.columns = ['_'.join(col).strip() if isinstance(col, tuple) else col for col in df.columns]
+
+When generating aggregation code using .agg() on a DataFrame, do not use 'first' as a string unless it's inside a .groupby(). Otherwise, it will raise an error because DataFrame.first() expects a time-based offset. If there's no .groupby(), and you want the first non-null value, use a lambda like:
+
+'Market': lambda x: x.iloc[0]
 """.strip()
 
     response = client.chat.completions.create(
@@ -449,6 +456,7 @@ with tab3:
                 st.metric(label="Result", value=result)
             else:
                 st.dataframe(result)
+
                     # Optional chart rendering based on GPT suggestion
                 if chart_type != "none" and isinstance(result, (pd.DataFrame, pd.Series)):
                     st.markdown("####  Suggested Chart")
@@ -468,20 +476,30 @@ with tab3:
             if isinstance(creative_info, pd.DataFrame) and not creative_info.empty:
                 st.markdown("#### 🎨 Creative Summary")
                 creative_info["Image"] = creative_info.index.map(get_image_path)
-                creative_info = creative_info.rename(columns={
+                base_map = {
                     "Impressions_sum": "Impressions",
                     "Clicks_sum": "Clicks",
                     "Click Rate_mean": "Click Rate",
-                    "Size_<lambda>": "Size",
-                    "Market_first": "Market",
-                    "Language_first": "Language",
-                    "Channel_first": "Channel",
-                    "Objective_first": "Objective",
-                    "Project_first": "Project",
-                    "Site (CM360)_<lambda>": "Sites",
+                    "Size": "Size",
+                    "Market": "Market",
+                    "Language": "Language",
+                    "Channel": "Channel",
+                    "Objective": "Objective",
+                    "Project": "Project",
+                    "Site (CM360)": "Sites",
                     "Date_min": "Start Date",
                     "Date_max": "End Date"
-                })
+                }
+
+                # Build a more flexible renaming function
+                def remap_columns(col):
+                    for base_key, clean_name in base_map.items():
+                        if col.startswith(base_key + "_") or col == base_key:
+                            return clean_name
+                    return col
+
+                # Apply renaming
+                creative_info.columns = [remap_columns(col) for col in creative_info.columns]
                 for idx, row in creative_info.iterrows():
                     col1, col2 = st.columns([1, 3])
 
