@@ -69,7 +69,9 @@ def extract_taxonomy_value(text, key):
 def enrich_dataframe(df):
     if "Campaign" in df.columns:
         df["Objective"] = df["Campaign"].apply(lambda x: extract_taxonomy_value(x, "CA"))
-        df["Project"] = df["Campaign"].apply(lambda x: extract_taxonomy_value(x, "MB"))
+        df["Project"] = df["Campaign"].apply(
+    lambda x: extract_taxonomy_value(x, "MB") or extract_taxonomy_value(x, "CT")
+)
     if "Ad" in df.columns:
         df["Size"] = df["Ad"].apply(lambda x: extract_taxonomy_value(x, "SZ"))
         df["Language"] = df["Ad"].apply(lambda x: extract_taxonomy_value(x, "LG"))
@@ -133,7 +135,7 @@ If the data contains multiple rows for the same value (e.g. same Creative, Campa
 Do not import anything. Only use variables `df` and `pd`.
 Return only code and the chart comment. No explanation.
 Rememeber whenever possible use the creative name column to group creatives, only when the specific creative is mentioned (full name) then use that otherwise stick to the Creative Name column
-✅ Additionally: if the query involves any Creative(s), return a second variable called `creative_info` that contains a grouped summary of the matching creative(s) from the original dataframe `df`. make sure that it is filtered and is respective to the result only
+Additionally: if the query involves any Creative(s), return a second variable called `creative_info` that contains a grouped summary of the matching creative(s) from the original dataframe `df`. make sure that it is filtered and is respective to the result only
 make sure to group them respectively, i want impressions, clicks, click rate, list of sizes, market, language, channel, objective, project, list of sites, duration start and end (date min and max?). However if size is the involed respectivelly, do not use this strcutre, use it specific to the code. 
 Whenever .agg() is used with multiple aggregation functions (like ['min', 'max']), flatten the resulting multi-level columns using:
 df.columns = ['_'.join(col).strip() if isinstance(col, tuple) else col for col in df.columns]
@@ -174,7 +176,7 @@ Do not import anything. Only use variables `df` and `pd`. Return only code and t
 
 When answering questions involving campaigns, group by the **`Campaign`** column. If a specific campaign name is mentioned, use the exact value in filtering. If a general query is asked, summarize by Campaign.
 
-✅ Additionally: if the query involves any Campaign(s), return a second variable called `campaign_info` that summarizes all matching campaign(s) from the original `df`.
+Additionally: if the query involves any Campaign(s), return a second variable called `campaign_info` that summarizes all matching campaign(s) from the original `df`.
 
 For `campaign_info`, group by `Campaign` and return:
 - `Impressions` (sum)
@@ -217,8 +219,6 @@ def parse_code_and_chart_type(gpt_code):
 
     return "\n".join(code_lines), chart_type
 
-
-# Tabs
 tab1, tab2, tab3 = st.tabs([" View Predictions", " Predict New Ad", "Query Exisiting Data"])
 
 # TAB 1: View Predictions
@@ -372,19 +372,15 @@ with tab2:
                 st.markdown(feedback)
 
 
-                
-                st.markdown("### 🔍 Top 3 Similar Ads")
-
-                query_embedding = extract_clip_features(image_path)
-
+            
                 # Load metadata
                 stored = np.load("model_store.npz", allow_pickle=True)
                 metadata = stored["metadata"].tolist()
 
                 # Find similar ads
-                top_similars = find_similar_images(query_embedding, metadata, top_k=3)
+                top_similars = find_similar_images(features, metadata, top_k=3)
 
-                st.subheader("🖼️ Top 3 Similar Ads")
+                st.subheader("Top 3 Similar Ads")
                 for entry in top_similars:
                     col1, col2 = st.columns([1, 3])
                     if os.path.exists(entry["image_path"]):
@@ -493,7 +489,7 @@ with tab3:
                     if row["Image"]:
                         col1.image(row["Image"], width=150)
                     else:
-                        col1.write("❌ No image")
+                        col1.write("No image")
 
                     # Format and display key info
                     col2.markdown(f"### `{idx}`")
@@ -555,7 +551,7 @@ with tab3:
 #                     if row["Image"]:
 #                         col1.image(row["Image"], width=150)
 #                     else:
-#                         col1.write("❌ No image")
+#                         col1.write("No image")
 
 #                     # Format and display key info
 #                     col2.markdown(f"### `{idx}`")

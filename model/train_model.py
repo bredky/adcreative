@@ -7,6 +7,7 @@ import os
 import joblib
 
 def save_similarity_db(df, X, file_path="similar_ads_db.npz"):
+    df = df.reset_index(drop=True)
     df["embedding"] = list(X)
     np.savez_compressed(file_path, metadata=df.to_dict(orient="records"))
 
@@ -14,7 +15,7 @@ def save_similarity_db(df, X, file_path="similar_ads_db.npz"):
 def load_and_process_data(excel_path, image_folder):
     df_raw = pd.read_excel(excel_path)
 
-    # 1. Group by creative and sum metrics
+    #  Group by creative and sum metrics
     grouped = (
         df_raw.groupby("Creative")[["Impressions", "Clicks"]]
         .sum()
@@ -42,7 +43,7 @@ def load_and_process_data(excel_path, image_folder):
                 "image_path": image_path
             })
         except Exception as e:
-            print(f"❌ Error processing {row['campaign_name']}: {e}")
+            print(f"Error processing {row['campaign_name']}: {e}")
 
     return np.array(X), np.array(y), metadata
 
@@ -51,14 +52,10 @@ def train_model(X, y, metadata, save_path="model_store.npz"):
     model.fit(X, y)
     preds = model.predict(X)
     r2 = r2_score(y, preds)
-
-# 2. Save metadata with embeddings and predicted CTR
     for i in range(len(metadata)):
         metadata[i]["predicted_ctr"] = float(np.clip(preds[i], 0, 1))
         metadata[i]["embedding"] = X[i].astype(np.float32)
         metadata[i]["image_path"] = os.path.join("images", f"{metadata[i]['campaign_name']}.jpg")
-
-    # 3. Save metadata and model
     np.savez_compressed(save_path, metadata=metadata)
     joblib.dump(model, "ctr_model.pkl")
 
