@@ -26,7 +26,21 @@ st.title(" Ad Creative CTR Predictor")
 st.sidebar.title(" Upload Campaign Data")
 excel_file = st.sidebar.file_uploader("Upload your campaign metrics Excel file", type=["xlsx"])
 
-image_folder = st.sidebar.text_input("Path to your image folder", value="images/")
+uploaded_images = st.sidebar.file_uploader(
+    "Upload your campaign images (select all images in the folder)", 
+    type=["jpg", "jpeg", "png"], 
+    accept_multiple_files=True
+)
+
+if uploaded_images:
+    image_folder = "uploaded_images"
+    os.makedirs(image_folder, exist_ok=True)
+    for img_file in uploaded_images:
+        img_path = os.path.join(image_folder, img_file.name)
+        with open(img_path, "wb") as f:
+            f.write(img_file.getbuffer())
+else:
+    image_folder = st.sidebar.text_input("Path to your image folder", value="images/")
 
 import re
 creative_mapping = {
